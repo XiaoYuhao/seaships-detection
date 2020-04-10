@@ -93,12 +93,49 @@ class Segmentation(object):
         #img = utils.drawMasks(img, mask)
         #img.show()
 
+    def _segmentation_faster(self, idx):
+        path = self.imgs[idx]
+        img_path = os.path.join(self.root, "JPEGImages", self.imgs[idx])
+        img = Image.open(img_path).convert("RGB")
+        arr = np.array(img)
+        mask = np.zeros((arr.shape[0],arr.shape[1]),dtype=np.float32)
+        anno_path = os.path.join(self.root, "Annotations", self.annotation[idx])
+        boxes = self._readxml(anno_path)
+        for box in boxes:
+            sub_arr = arr[box[1]:box[3],box[0]:box[2]]
+            height = box[3] - box[1]
+            width = box[2] - box[0]
+            low = [box[0],box[3],box[0]+width,box[3]+height]
+            up = [box[0],box[1]-height,box[0]+width,box[1]]
+            low_S,low_mean = self._gauss(low,img)
+            up_S,up_mean = self._gauss(up,img)
+            d_min = 2.5
+
+            for i in range(height):
+                for j in range(width):
+                    pix = sub_arr[i,j]
+                    d_low = self._dist(low_S,low_mean,pix)
+                    d_up = self._dist(up_S,up_mean,pix)
+                    if d_up > d_min and d_low > d_min :
+                        mask[i + box[1], j + box[0]] = 1
+                
+            mask = utils._morph_opening(mask,box)
+            mask = utils._morph_closing(mask,box)
+
+        mask = mask[np.newaxis,:,:]
+        #mask = Image.fromarray(mask)
+        mask = torch.from_numpy(mask)
+        mask = transforms.TensorToPIL(mask)
+        mask_path = os.path.join(self.root, "MaskImages", self.imgs[idx].split('.')[0]+".png")
+        print(mask_path)
+        mask.save(mask_path)       
+
     def work(self):
         for idx in range(1093,len(self.imgs)):
-            self._segmentation(idx)
+            self._segmentation_faster(idx)
 
 if __name__ == '__main__':
     #Mahalanobis_distance()
-    S = Segmentation('.')
+    S = Segmentation('../')
     S.work()
     #print(S.imgs[0])
